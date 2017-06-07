@@ -423,6 +423,30 @@ Spectrum PathTracer::estimate_direct_lighting(const Ray& r, const Intersection& 
 
   Spectrum L_out;
 
+  for (SceneLight* light: scene->lights) {
+    int num_samples = ns_area_light;
+    if (light->is_delta_light()){
+      num_samples = 1;
+    }
+
+    Spectrum l_rad_out;
+    for (int i = 0; i < num_samples; i++){
+      Vector3D wi;
+      float distToLight;
+      float pdf;
+      Spectrum Li = light->sample_L(hit_p, &wi, &distToLight, &pdf);
+      Vector3D w_in = w2o * wi;
+
+      if (w_in.z >= 0) {
+        Ray shadow_ray = Ray(EPS_D*wi + hit_p, wi, distToLight);
+        if(!bvh->intersect(shadow_ray)){
+          l_rad_out += isect.bsdf->f(w_out, w_in)*Li*w_in.z/pdf;
+        }
+      }
+    }
+    L_out += l_rad_out/num_samples;
+  }
+
   return L_out;
 }
 
@@ -437,8 +461,25 @@ Spectrum PathTracer::estimate_indirect_lighting(const Ray& r, const Intersection
   Vector3D hit_p = r.o + r.d * isect.t;
   Vector3D w_out = w2o * (-r.d);
 
-  return Spectrum();
+  Vector3D w_in;
+  float pdf;
+  Spectrum L_out;
 
+
+  Spectrum bsdf_sample = isect.bsdf->sample_f(w_out, &w_in, &pdf);
+  float reflectance = bsdf_sample.illum()*15;
+  float tpdf = clamp(1.0/reflectance - 1.0, 0.0, 1.0);
+
+  Vector3D wi = o2w*w_in;
+
+  if (!coin_flip(tpdf)){
+    Ray light_ray = Ray(EPS_D*wi+ hit_p, wi);
+    light_ray.depth = r.depth - 1;
+    Spectrum light = trace_ray(light_ray, isect.bsdf->is_delta());
+    L_out = light*bsdf_sample*w_in.z/(pdf*(1- tpdf)); 
+  }
+
+  return L_out;
 }
 
 Spectrum PathTracer::trace_ray(const Ray &r, bool includeLe) {
@@ -455,7 +496,7 @@ Spectrum PathTracer::trace_ray(const Ray &r, bool includeLe) {
   // This line returns a color depending only on the normal vector 
   // to the surface at the intersection point.
   // Remove it when you are ready to begin Part 3.
-  return normal_shading(isect.n);
+  //return normal_shading(isect.n);
 
   // We only include the emitted light if the previous BSDF was a delta distribution
   // or if the previous ray came from the camera.
@@ -487,8 +528,24 @@ Spectrum PathTracer::raytrace_pixel(size_t x, size_t y) {
 
   int num_samples = ns_aa; // total samples to evaluate
   Vector2D origin = Vector2D(x,y); // bottom left corner of the pixel
+  Spectrum pixelSptrm = Spectrum(0, 0, 0);
+  double w = (double) sampleBuffer.w;
+  double h = (double) sampleBuffer.h;
+  if (num_samples == 1) {
+  	Ray currentRay = camera->generate_ray((((double) origin.x) + 0.5)/w,
+  										  (((double) origin.y) + 0.5)/h);
+    currentRay.depth = max_ray_depth;
+  	return trace_ray(currentRay, true);
+  }
+  for (int i = 0; i < num_samples; i++){
+  	Vector2D sample = gridSampler->get_sample();
+  	Ray currentRay = camera->generate_ray((((double) origin.x) + sample.x)/w,
+  										  (((double) origin.y) + sample.y)/h);
+    currentRay.depth = max_ray_depth;
+  	pixelSptrm += trace_ray(currentRay, true);
+  }
 
-  return Spectrum();
+  return pixelSptrm/num_samples;
 }
 
 void PathTracer::raytrace_tile(int tile_x, int tile_y,
