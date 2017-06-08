@@ -1,4 +1,4 @@
-Path Tracer
+PathTracer
 ===================================
 
 # Overview
