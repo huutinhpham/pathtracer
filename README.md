@@ -8,7 +8,7 @@ This project aims to render a scene. Firstly, random rays from a given camera ar
 
 ### Follow the link for full explanation of the methods made by me
 
-[CLICK ME FOR DOCUMENTATIONS](https://huutinhpham.github.io/projects/pathtracer/pathtracer.html)
+[CLICK ME FOR DOCUMENTATIONS](http://huutinhpham.com/projects/pathtracer/pathtracer.html)
 
 ##### Credit
 
